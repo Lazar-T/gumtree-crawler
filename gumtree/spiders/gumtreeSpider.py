@@ -18,7 +18,6 @@ class GumtreespiderSpider(CrawlSpider):
          seed % i for i in range(2000)
     ]
 
-
     def parse(self, response):
         hxs = Selector(response)
         item_selector = hxs.xpath('//h3/a/@href').extract()
@@ -26,11 +25,9 @@ class GumtreespiderSpider(CrawlSpider):
         for url, job_type in zip(item_selector, job_type_selector):
             yield Request(urlparse.urljoin(response.url, url),
                           callback=self.parse_item,
-                          meta={'job_type':job_type},
+                          meta={'job_type': job_type},
 
                           )
-
-
 
     def parse_item(self, response):
         l = ItemLoader(item=GumtreeItem(), response=response)
