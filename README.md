@@ -14,3 +14,9 @@ There are 30k+ job postings currently available.
 git clone https://github.com/Lazar-T/gumtree-crawler
 cd gumtree-crawler
 scrapy crawl gumtree
+```
+
+### Testing
+```
+scrapy check gumtree
+```
