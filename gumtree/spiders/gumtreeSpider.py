@@ -1,42 +1,53 @@
 # -*- coding: utf-8 -*-
-import scrapy
-from gumtree.items import GumtreeItem
-from scrapy.contrib.loader import ItemLoader
-from scrapy.contrib.loader.processor import Compose, MapCompose
-from w3lib.html import replace_escape_chars, remove_tags
-from scrapy.contrib.spiders import CrawlSpider
-from scrapy.http import Request
-from scrapy.selector import Selector
 import urlparse
 
+from scrapy import Spider
+from scrapy.http import Request
+from scrapy.loader import ItemLoader
+from scrapy.loader.processors import Compose, MapCompose
+from w3lib.html import replace_escape_chars, remove_tags
 
-class GumtreespiderSpider(CrawlSpider):
-    name = "gumtreeSpider"
-    allowed_domains = ["gumtree.com.au"]
-    seed = 'http://www.gumtree.com.au/s-jobs/page-%d/c9302?ad=wanted'
-    start_urls = [
-         seed % i for i in range(2000)
-    ]
+from gumtree.items import GumtreeItem
+
+
+class GumtreespiderSpider(Spider):
+    name = 'gumtree'
+    allowed_domains = ['gumtree.com.au']
+    start_urls = ['http://www.gumtree.com.au/s-jobs/c9302?ad=wanted']
 
     def parse(self, response):
-        hxs = Selector(response)
-        item_selector = hxs.xpath('//h3/a/@href').extract()
-        job_type_selector = hxs.xpath('//*[@class="rs-ad-attributes h-elips"]/text()').extract()
-        for url, job_type in zip(item_selector, job_type_selector):
+        """Yields each job url and iterates over pages of results.
+
+        @url http://www.gumtree.com.au/s-jobs/c9302?ad=wanted
+        @scrapes urls job_types
+
+        """
+        # process each job link
+        urls = response.xpath('//h6/a/@href').extract()
+        job_types = response.xpath(
+            './/*[@class="rs-ad-attributes-jobtype_s"]/text()').extract()
+        for url, job_type in zip(urls, job_types):
             yield Request(urlparse.urljoin(response.url, url),
                           callback=self.parse_item,
                           meta={'job_type': job_type},
-
                           )
 
+        # process next page
+        next_page_url = response.xpath(
+            './/*[@class="rs-paginator-btn next"]/@href').extract_first()
+        absolute_next_page_url = response.urljoin(next_page_url)
+        request = Request(absolute_next_page_url)
+        yield request
+
     def parse_item(self, response):
+        """Returns scraped data from each individual job link."""
         l = ItemLoader(item=GumtreeItem(), response=response)
         l.default_output_processor = MapCompose(lambda v: v.strip(), replace_escape_chars)
+
         l.add_xpath('name', '//h1/text()')
-        location_selector = response.xpath(".//*[@id='ad-map']/span[2]/text()").extract()
-        l.add_value('location', location_selector[0])
-        sender_selector = response.xpath('//*[@class="reply-form-name"]/text()').extract()
-        l.add_value('sender', sender_selector[0])
-        l.add_xpath('description', '//*[@id="ad-description"]/text()')
+        l.add_xpath('location', './/*[@id="ad-map"]/span[2]/text()')
+        l.add_xpath('sender', '//*[@class="name"]/text()')
+        l.add_xpath('description', '//*[@id="job-description"]/p/text()')
         l.add_value('job_type', response.meta['job_type'])
+
         return l.load_item()
